@@ -10,9 +10,9 @@ import supervision as sv
 from supervision.geometry.core import Point
 from supervision import Color
 
-SOURCE = np.array([[1252, 787], [2298, 803], [5039, 2159], [-550, 2159]])
+SOURCE = np.array([[649, 248], [1170, 267], [2953, 1079], [-1582, 1079]])
 
-TARGET_WIDTH = 25
+TARGET_WIDTH = 33
 TARGET_HEIGHT = 250
 
 TARGET = np.array(
@@ -138,7 +138,7 @@ if __name__ == "__main__":
                         label_colors.append((0, 255, 0)) 
 
             annotated_frame = frame.copy()
-            annotated_frame = sv.draw_polygon(annotated_frame, polygon=SOURCE, color=sv.Color.red())
+            annotated_frame = sv.draw_polygon(annotated_frame, polygon=SOURCE, color=sv.Color.RED)
             annotated_frame = trace_annotator.annotate(
                 scene=annotated_frame, detections=detections
             )
@@ -152,7 +152,7 @@ if __name__ == "__main__":
                     scene=annotated_frame,
                     text=label,
                     text_anchor=Point(x=int(point[0]), y=int(point[1]) - 10), 
-                    text_color=Color(*color),  
+                    text_color=Color(*color), 
                     text_scale=text_scale,
                     text_thickness=thickness,
                 )

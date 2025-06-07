@@ -82,7 +82,8 @@ if __name__ == "__main__":
     thickness = sv.calculate_optimal_line_thickness(
         resolution_wh=video_info.resolution_wh
     )
-    text_scale = sv.calculate_optimal_text_scale(resolution_wh=video_info.resolution_wh)
+    
+    text_scale = sv.calculate_optimal_text_scale(resolution_wh=video_info.resolution_wh) * 0.7
     box_annotator = sv.BoxAnnotator(thickness=thickness)
     trace_annotator = sv.TraceAnnotator(
         thickness=thickness,
@@ -96,6 +97,9 @@ if __name__ == "__main__":
     view_transformer = ViewTransformer(source=SOURCE, target=TARGET)
 
     coordinates = defaultdict(lambda: deque(maxlen=video_info.fps))
+    time_in_zone = defaultdict(float)  
+    seen_ids = set() 
+    vehicle_type_count = defaultdict(int)
 
     with sv.VideoSink(args.target_video_path, video_info) as sink:
         for frame in frame_generator:
@@ -112,8 +116,19 @@ if __name__ == "__main__":
             labels = []
             label_colors = []
 
-            for idx, (tracker_id, [_, y]) in enumerate(zip(detections.tracker_id, points)):
-                coordinates[tracker_id].append(y)
+            current_ids = set(detections.tracker_id)
+            for tid in current_ids:
+                time_in_zone[tid] += 1 / video_info.fps
+
+            for tracker_id in detections.tracker_id:
+            
+                idx = np.where(detections.tracker_id == tracker_id)[0][0]
+                class_id = detections.class_id[idx]
+                class_name = model.names[class_id]
+
+                if tracker_id not in seen_ids:
+                    vehicle_type_count[class_name] += 1
+                    seen_ids.add(tracker_id)
 
             for idx, tracker_id in enumerate(detections.tracker_id):
                 class_id = detections.class_id[idx]
@@ -122,20 +137,23 @@ if __name__ == "__main__":
                 if len(coordinates[tracker_id]) < video_info.fps / 2:
                     label = f"#{tracker_id} {class_name}"
                     labels.append(label)
-                    label_colors.append((0, 255, 0)) 
+                    label_colors.append((0, 255, 0))
                 else:
                     y_start = coordinates[tracker_id][-1]
                     y_end = coordinates[tracker_id][0]
                     distance = abs(y_start - y_end)
                     time = len(coordinates[tracker_id]) / video_info.fps
                     speed = distance / time * 3.6
-                    label = f"#{tracker_id} {class_name} {int(speed)} km/h"
+                    time_inside = time_in_zone.get(tracker_id, 0)
+                    label = f"#{tracker_id} {class_name} {int(speed)} km/h {time_inside:.1f}s inside"
                     labels.append(label)
 
                     if speed > 120:
-                        label_colors.append((0, 0, 255)) 
+                        label_colors.append((255, 0, 0))
                     else:
-                        label_colors.append((0, 255, 0)) 
+                        label_colors.append((0, 255, 0))
+
+                coordinates[tracker_id].append(points[idx][1])
 
             annotated_frame = frame.copy()
             annotated_frame = sv.draw_polygon(annotated_frame, polygon=SOURCE, color=sv.Color.RED)
@@ -145,14 +163,26 @@ if __name__ == "__main__":
             annotated_frame = box_annotator.annotate(
                 scene=annotated_frame, detections=detections
             )
+
             anchor_points = detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
 
             for label, color, point in zip(labels, label_colors, anchor_points):
                 annotated_frame = sv.draw_text(
                     scene=annotated_frame,
                     text=label,
-                    text_anchor=Point(x=int(point[0]), y=int(point[1]) - 10), 
-                    text_color=Color(*color), 
+                    text_anchor=Point(x=int(point[0]), y=int(point[1]) - 10),
+                    text_color=Color(*color),
+                    text_scale=text_scale,
+                    text_thickness=thickness,
+                )
+
+            count_texts = [f"{k}: {v}" for k, v in vehicle_type_count.items()]
+            for i, text in enumerate(count_texts):
+                annotated_frame = sv.draw_text(
+                    scene=annotated_frame,
+                    text=text,
+                    text_anchor=Point(x=100, y=20 + i * 20),
+                    text_color=Color(0, 255, 0),
                     text_scale=text_scale,
                     text_thickness=thickness,
                 )
